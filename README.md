@@ -6,7 +6,7 @@ Projeto de ciência de dados para estimar a quantidade de notificações prováv
 
 ## Visualização
 
-Abra a [visualização web](index.html) para explorar o panorama, a distribuição municipal e a comparação das previsões. A página não exige servidor nem JavaScript; os gráficos são imagens versionadas neste repositório.
+Abra o [painel publicado](https://leocarneiroo.github.io/projeto-semantix-dengue/) para explorar o panorama, a distribuição municipal e a comparação das previsões. O painel é estático; os gráficos são imagens versionadas neste repositório.
 
 ![Série semanal nacional de notificações prováveis](figures/serie_nacional.png)
 
