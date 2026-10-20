@@ -42,8 +42,9 @@ python src/analyze.py
 - `index.html` e `style.css`: painel visual responsivo com os principais achados.
 - `relatorio.md`: documentação técnica com coleta, modelagem e conclusões.
 - `figures/`: gráficos usados na análise.
+- `evidencias/`: três capturas do repositório, do relatório e do painel, prontas para anexar à tarefa.
 - `data/processed/`: contagens agregadas, métricas e previsões do teste.
-- `data/processed/source_metadata.json`: data da execução, SHA-256 e data conhecida de download de cada arquivo SINAN.
+- `data/processed/analysis_summary.json`: recorte, totais, filtros e configuração principal da análise.
 - `data/processed/model_comparison_metrics.csv` e `model_tuning_validation.csv`: comparação de modelos e seleção de parâmetros pela validação de 2023.
 - `src/analyze.py`: pipeline de download, agregação, modelagem e visualização.
 - `src/compare_models.py`: compara os baselines com Random Forest e LightGBM Poisson/ajustado usando o painel processado existente.
@@ -70,6 +71,6 @@ Consulte `relatorio.md` antes de interpretar os resultados e os gráficos.
 
 ## Reprodutibilidade
 
-Os dados de origem são públicos e não confidenciais. Os microdados brutos ficam fora do Git (`data/raw/` está ignorado); apenas dados agregados, saídas do modelo e gráficos derivados são versionados. Os resultados publicados correspondem à extração registrada em `source_metadata.json` e podem mudar quando o Ministério revisa os dados.
+Os dados de origem são públicos e não confidenciais. Os microdados brutos ficam fora do Git (`data/raw/` está ignorado); apenas dados agregados, saídas do modelo e gráficos derivados são versionados. Os resultados publicados correspondem à extração de 19/10/2026 registrada em `analysis_summary.json` e podem mudar quando o Ministério revisa os dados.
 
-Na próxima execução do pipeline, `analysis_summary.json` registrará `pipeline_run_at`; `source_metadata.json` separará essa data do download de cada arquivo SINAN. Para arquivos preexistentes sem histórico, a data de download ficará como `null`.
+Na próxima execução completa do pipeline, `analysis_summary.json` registrará `pipeline_run_at` e `source_metadata.json` incluirá hashes SHA-256. Datas de download sem histórico ficam como `null`, sem serem confundidas com a data da execução.
