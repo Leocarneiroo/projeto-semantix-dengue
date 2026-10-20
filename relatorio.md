@@ -4,7 +4,7 @@
 
 Este projeto avalia se dados públicos do SINAN permitem prever o volume de notificações prováveis de dengue na semana seguinte, por município. A aplicação pretendida é apoiar vigilância epidemiológica no planejamento agregado de equipes e insumos. O tema também se conecta à oferta de IA preditiva e integração de dados de saúde divulgada pela [Semantix Saúde](https://semantix.ai/industries/saude/).
 
-A análise encontrou um pico excepcional em 2024: **6,39 milhões** de notificações prováveis após os filtros deste estudo, com pico semanal de **422.751** casos na semana iniciada em 17 de março. Os modelos estimam notificações da semana seguinte por município; não preveem diretamente o início de uma epidemia. O Random Forest melhorou sobre o LightGBM, mas nenhum dos dois superou repetir os casos da semana atual. O backtest não demonstra que um alerta teria evitado casos.
+A análise encontrou um pico excepcional em 2024: **6,39 milhões** de notificações prováveis após os filtros deste estudo, com pico semanal de **422.751** casos na semana iniciada em 17 de março. Os modelos estimam notificações da semana seguinte por município; não preveem diretamente o início de uma epidemia. A comparação publicada ainda reflete a execução anterior, sem clima e vizinhança espacial: Random Forest melhorou sobre LightGBM, mas nenhum superou repetir os casos da semana atual. O backtest não demonstra que um alerta teria evitado casos.
 
 ## Coleta de dados
 
@@ -12,6 +12,8 @@ A análise encontrou um pico excepcional em 2024: **6,39 milhões** de notifica�
 
 - **SINAN/DATASUS — dengue:** arquivos anuais públicos em CSV, de 2015 a 2025. O Ministério da Saúde descreve casos prováveis como notificações suspeitas, exceto casos descartados, e recomenda município de residência para incidência. [Portal de Dados Abertos do SUS](https://dadosabertos.saude.gov.br/dataset/arboviroses-dengue)
 - **IBGE — população municipal:** Censo 2022, tabela 4714, variável “População residente”. Usada como denominador comum para comparar incidência entre municípios. [API do IBGE](https://servicodados.ibge.gov.br/api/v3/agregados/4714/periodos/2022/variaveis/93?localidades=N6%5Ball%5D)
+- **IBGE — malha municipal:** polígonos de municípios usados para obter pontos representativos e vizinhança por contiguidade Queen. [Malhas territoriais do IBGE](https://www.ibge.gov.br/geociencias/organizacao-do-territorio/malhas-territoriais/15774-malhas.html)
+- **Open-Meteo — ERA5:** precipitação, temperatura média e umidade relativa histórica. A API gratuita é para uso não comercial, tem limite de chamadas e não garante disponibilidade. [Documentação histórica](https://open-meteo.com/en/docs/historical-weather-api), [termos de uso](https://open-meteo.com/en/terms)
 
 Extração executada em **19/10/2026**. Os microdados foram processados localmente e não fazem parte da entrega; os arquivos publicados pelo projeto são agregados por município e semana.
 
@@ -29,7 +31,9 @@ O alvo foi construído com município de residência (`ID_MN_RESI`) e data de in
 | Quebra do ES | Exclui registros do Espírito Santo desde 2020 por mudança de sistema | Evita interpretar uma quebra de cobertura como queda real; 335.447 notificações foram excluídas |
 | Painel semanal | Cria linha para cada município e semana; semanas sem registro recebem zero | Completa a série, mas zero significa “nenhuma notificação registrada”, não “nenhuma infecção” |
 
-População do Censo 2022 é usada somente no gráfico de incidência municipal; não entra como variável de previsão. O modelo usa histórico de notificações, município/UF e posição sazonal.
+População do Censo 2022 é usada somente no gráfico de incidência municipal; não entra como variável de previsão. O modelo usa histórico de notificações, município/UF, posição sazonal, clima semanal observado e casos dos municípios vizinhos na semana observada. Os dados meteorológicos são reanálise em grade, não medições em cada município; pontos representativos e resolução do ERA5 suavizam diferenças locais.
+
+A defasagem espacial é `W*y`: média ponderada dos casos observados nos municípios contíguos, com pesos Queen normalizados por linha. Ela entra como variável preditiva do LightGBM; não estima um modelo SAR/SEM completo nem identifica efeito causal. Municípios sem vizinho contíguo ficam sem valor espacial. Usa-se a malha IBGE vigente no momento da execução; mudanças recentes de limites podem diferir do território durante os anos históricos. A malha e o cache climático são salvos em `data/processed/` para evitar baixar tudo novamente.
 
 O SINAN registra o município de notificação e o de residência; a análise usa residência. O Ministério informa que as bases podem ser revisadas e divergir de outras consolidações oficiais. Há também uma quebra de cobertura: o Espírito Santo passou a usar e-SUS VS para arboviroses a partir de 2020. Para não tratar ausência de dados como baixo risco, os registros do ES desde 2020 foram excluídos da série e da avaliação do modelo. [Notas da base de dengue](https://dadosabertos.saude.gov.br/dataset/arboviroses-dengue)
 
@@ -69,18 +73,20 @@ Unidade de previsão: município-semana. Alvo: contagem de notificações prová
 
 ### Modelos e validação
 
-Foi treinado um **LightGBM regressor** sobre `log1p(casos)`, com município e UF como variáveis categóricas, histórico de 1, 2, 3, 4, 13, 51 e 52 semanas e características sazonais. A previsão final foi revertida para a escala de casos e truncada em zero.
+O **LightGBM regressor** é treinado sobre `log1p(casos)`, com município e UF categóricos, defasagens de casos, sazonalidade, precipitação acumulada, temperatura e umidade semanais, além da defasagem espacial `W*y`. As features de clima e vizinhança da linha t usam só dados observados até a semana t para prever t+1. A previsão volta à escala de casos e é truncada em zero. A comparação inclui versão base sem clima/espacial e versão enriquecida com ambas as famílias, sob os mesmos hiperparâmetros.
 
 Comparadores:
 
 - **Persistência:** previsão da próxima semana = casos da semana atual.
 - **Sazonal ingênuo:** previsão = casos de aproximadamente 52 semanas antes.
 
-O treino termina em 2022; 2023 é a validação temporal. Para o teste, o modelo é retreinado até 2023 e avaliado em 2024 e 2025. Essa separação respeita a ordem do tempo e evita divisão aleatória entre semanas vizinhas. Não foi feita busca de hiperparâmetros; os parâmetros estão registrados em `data/processed/analysis_summary.json`.
+O teste final permanece em 2024–2025. A busca compara 12 configurações LightGBM geradas com semente fixa e as seleciona pela WAPE média em três validações expansivas: treino até 2020 e validação em 2021; até 2021 e validação em 2022; até 2022 e validação em 2023. A configuração selecionada é retreinada até 2023. O arquivo `model_tuning_validation.csv` registra WAPE por candidato e fold. As métricas de comparação são calculadas por ano no Brasil e por UF; a exclusão do ES desde 2020 permanece.
 
 Métricas: MAE e RMSE por município-semana; WAPE para comparar o erro absoluto total com o volume observado; captura de casos ao priorizar os 10% de municípios com maior previsão em cada semana. As notificações são retrospectivas e podem ser digitadas ou revisadas depois da semana dos sintomas. Por isso, as variáveis do backtest podem conter informação que não estaria disponível no momento de uma decisão real.
 
 ### Resultados
+
+**As métricas abaixo são da extração versionada anterior à inclusão de clima e dependência espacial.** A tentativa de atualizar os resultados foi bloqueada pelo limite por minuto da API meteorológica; rode `python -m src.compare_models` após a coleta para gerar a tabela atualizada. Não interprete os números abaixo como avaliação do modelo enriquecido.
 
 | Ano | Modelo | MAE | RMSE | WAPE |
 |---:|---|---:|---:|---:|
@@ -99,7 +105,7 @@ Ao ordenar municípios por previsão e alertar os 10% do topo por semana, o Ligh
 
 ### Comparação com outros modelos
 
-Também foram testados Random Forest, LightGBM com objetivo Poisson e uma pequena busca de parâmetros para LightGBM. Os parâmetros foram escolhidos pela WAPE de validação em 2023; o teste 2024–2025 ficou separado. O Random Forest usou uma amostra fixa de até 300 mil linhas de treino, 60 árvores, profundidade máxima 16 e codificação one-hot dos municípios/UF. A busca LightGBM comparou três configurações; não é uma busca exaustiva.
+Na execução versionada anterior, também foram testados Random Forest, LightGBM Poisson e uma busca curta de parâmetros. Esses números abaixo não incluem clima, vizinhança espacial, métricas por UF nem validação expansiva. A implementação atual compara Random Forest e Poisson com LightGBM base/enriquecido; usa busca de 12 configurações em três anos de validação e grava métricas por UF.
 
 | Modelo | WAPE 2023 (validação) | WAPE 2024 (teste) | WAPE 2025 (teste) |
 |---|---:|---:|---:|
@@ -112,7 +118,7 @@ Também foram testados Random Forest, LightGBM com objetivo Poisson e uma pequen
 
 O Random Forest melhorou sobre LightGBM nos três anos, mas **não superou persistência em nenhum dos três anos**. O ajuste de parâmetros do LightGBM praticamente não mudou o teste. Poisson ficou bem atrás. A captura do top 10% ficou quase empatada entre persistência e modelos de árvore: a diferença foi inferior a 0,3 ponto percentual em cada ano. Essa métrica de ordenação não compensou o maior erro de contagem.
 
-Os resultados completos ficam em `data/processed/model_comparison_metrics.csv`; as configurações comparadas e seus resultados de validação ficam em `data/processed/model_tuning_validation.csv`. Para repetir a comparação: `python -m src.compare_models`.
+Os resultados atualizados ficam em `data/processed/model_comparison_metrics.csv`; as configurações e seus resultados por fold ficam em `data/processed/model_tuning_validation.csv`; as previsões municipais ficam em `data/processed/model_comparison_predictions.csv.gz`. Para repetir a comparação: `python -m src.compare_models`. Na primeira execução, a coleta ERA5 pode pausar em respostas HTTP 429 e retomar do cache de lotes. O cache gratuito da Open-Meteo serve somente para uso não comercial.
 
 ### O que os números permitem inferir
 
@@ -143,4 +149,4 @@ Portanto, o resultado atual é **um estudo retrospectivo de previsão de notific
 3. **Ainda não há evidência de prevenção:** não avaliamos resposta a alertas nem comparamos municípios que receberam ações com grupos de comparação.
 4. **Limitação de uso real:** atraso/revisão de dados e exclusão do ES desde 2020 afastam o backtest da operação ao vivo.
 
-Próximos passos prioritários: (1) reconstruir snapshots semanais para usar apenas o que era conhecido na data da previsão; (2) definir e testar formalmente o que conta como surto, medindo antecedência, falsos alertas e surtos não detectados; (3) comparar por origem móvel e com modelos simples; (4) avaliar previsões probabilísticas; (5) incorporar clima, vigilância vetorial e uma fonte comparável para o ES. Para alegar prevenção, depois seria necessário avaliar prospectivamente se as ações acionadas por alertas reduzem desfechos, controlando diferenças entre locais e períodos. A OMS também recomenda usar indicadores e resposta definidos para o contexto local, em vez de tratar uma previsão isolada como intervenção ([guia técnico de vigilância e resposta](https://www.who.int/publications/i/item/9789241549738)).
+Próximos passos prioritários: (1) atualizar métricas e gráficos depois de concluir o cache ERA5; (2) reconstruir snapshots semanais para usar apenas notificações conhecidas na data da previsão; (3) definir e avaliar formalmente surtos, antecedência, falsos alertas e surtos não detectados; (4) avaliar previsões probabilísticas e uma fonte comparável para o ES. Para alegar prevenção, seria necessário avaliar prospectivamente se as ações acionadas por alertas reduzem desfechos, controlando diferenças entre locais e períodos. A OMS também recomenda usar indicadores e resposta definidos para o contexto local, em vez de tratar uma previsão isolada como intervenção ([guia técnico de vigilância e resposta](https://www.who.int/publications/i/item/9789241549738)).

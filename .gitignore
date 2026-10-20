@@ -1,4 +1,7 @@
 data/raw/
+data/processed/ibge_municipalities_current.geojson
+data/processed/municipality_week_weather.csv.gz
+data/processed/weather_batches/
 .venv/
 .context-bridge/
 __pycache__/

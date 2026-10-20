@@ -13,7 +13,7 @@ Ampliar o pipeline existente com variáveis meteorológicas, dependência espaci
    - Registrar fonte, período e variáveis no relatório. A API gratuita Open-Meteo é destinada a uso não comercial; o pipeline deve documentar essa condição.
 
 2. **Dependência espacial**
-   - Construir matriz de vizinhança municipal a partir da malha municipal do IBGE, com contiguidade Queen e pesos normalizados por linha.
+   - Construir matriz de vizinhança municipal a partir da malha municipal mais recente do IBGE, com contiguidade Queen e pesos normalizados por linha.
    - Criar defasagem espacial de casos observados na semana corrente (`W*y`), sem incorporar o alvo da semana seguinte.
    - Comparar LightGBM com e sem a variável espacial, mantendo demais condições iguais. Interpretar como ganho preditivo, sem alegação causal.
 
@@ -37,7 +37,7 @@ Ampliar o pipeline existente com variáveis meteorológicas, dependência espaci
 
 ## Limitações e decisões
 
-- ERA5 representa reanálise em grade, não medição meteorológica pontual em cada município; centroides e grade podem suavizar variação intramunicipal.
+- ERA5 representa reanálise em grade, não medição meteorológica pontual em cada município; pontos representativos e grade podem suavizar variação intramunicipal. A malha IBGE vigente pode divergir dos limites municipais históricos.
 - A API climática gratuita tem limites e licença de uso não comercial. O cache evita chamadas repetidas, mas não remove a necessidade de respeitar os termos da fonte.
 - Municípios sem vizinhos contíguos precisam de tratamento determinístico e documentado; não podem receber um valor espacial inventado.
 - A defasagem `W*y` é uma feature espacial preditiva, não um modelo SAR/SEM completo nem estimativa causal.

@@ -20,6 +20,8 @@ import pandas as pd
 import requests
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
+from src import environmental_features
+
 
 ROOT = Path(__file__).resolve().parents[1]
 RAW = ROOT / "data" / "raw"
@@ -279,7 +281,12 @@ def load_and_prepare_counts(run_at: str | None = None) -> tuple[pd.DataFrame, pd
     return counts, reference, {**metadata, **exclusions}
 
 
-def build_feature_panel(counts: pd.DataFrame, reference: pd.DataFrame) -> tuple[pd.DataFrame, list[str]]:
+def build_feature_panel(
+    counts: pd.DataFrame,
+    reference: pd.DataFrame,
+    weather: pd.DataFrame | None = None,
+    neighbors: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, list[str]]:
     municipality_codes = sorted(set(reference["municipality_code"].astype(str)) | set(counts["municipality_code"].astype(str)))
     weeks = pd.date_range("2014-12-28", "2025-12-21", freq="W-SUN")
     panel = pd.MultiIndex.from_product(
@@ -304,6 +311,12 @@ def build_feature_panel(counts: pd.DataFrame, reference: pd.DataFrame) -> tuple[
     target_week_number = panel["target_week"].dt.strftime("%U").astype(int).clip(upper=52)
     panel["week_sin"] = np.sin(2 * np.pi * target_week_number / 52).astype(np.float32)
     panel["week_cos"] = np.cos(2 * np.pi * target_week_number / 52).astype(np.float32)
+    if neighbors is not None:
+        panel["spatial_lag_cases"] = environmental_features.spatial_lag(
+            panel["cases"].to_numpy(), municipality_codes, len(weeks), neighbors
+        )
+    if weather is not None:
+        panel = panel.merge(weather, on=["municipality_code", "week_start"], how="left")
     panel = panel[panel["target_week_end"].le(pd.Timestamp("2025-12-31"))]
     panel = panel[~((panel["uf"].eq("ES")) & (panel["target_year"].ge(2020)))].copy()
     # Exigir alvo conhecido e histórico suficiente para a feature sazonal usada pelo modelo.
@@ -315,6 +328,12 @@ def build_feature_panel(counts: pd.DataFrame, reference: pd.DataFrame) -> tuple[
         "municipality_code", "uf", "lag_0", "lag_1", "lag_2", "lag_3", "lag_4",
         "lag_13", "lag_51", "lag_52", "mean_4w", "week_sin", "week_cos",
     ]
+    if weather is not None:
+        features.extend([
+            "precipitation_mm", "temperature_c", "relative_humidity_pct",
+        ])
+    if neighbors is not None:
+        features.append("spatial_lag_cases")
     return panel, features
 
 
@@ -535,7 +554,8 @@ def main() -> None:
         "random_state": 42,
     }
     counts, reference, metadata = load_and_prepare_counts(run_at=started_at)
-    panel, features = build_feature_panel(counts, reference)
+    reference, weather, neighbors = environmental_features.load_environmental_data(reference, PROCESSED)
+    panel, features = build_feature_panel(counts, reference, weather, neighbors)
     validation_predictions, test_predictions, metrics, capture = train_and_predict(panel, features, params)
     write_csv_atomic(validation_predictions, PROCESSED / "validation_2023_predictions.csv.gz")
     write_csv_atomic(test_predictions, PROCESSED / "test_2024_2025_predictions.csv.gz")
@@ -556,6 +576,11 @@ def main() -> None:
         "annual_cases": {str(int(year)): int(value) for year, value in annual_cases.items()},
         "validation_year": 2023,
         "test_years": [2024, 2025],
+        "features": features,
+        "weather_source": "Open-Meteo Historical Weather API (ERA5)",
+        "weather_municipalities": int(weather["municipality_code"].nunique()),
+        "weather_missing_panel_rows": int(panel["relative_humidity_pct"].isna().sum()),
+        "spatial_weights": "IBGE municipality Queen contiguity, row-normalized",
         "model": params,
         "elapsed_seconds": round(time.time() - started, 1),
     }
