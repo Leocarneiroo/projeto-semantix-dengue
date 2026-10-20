@@ -411,11 +411,24 @@ def save_figures(
     capture: pd.DataFrame,
 ) -> None:
     plt.style.use("seaborn-v0_8-whitegrid")
+    # As figuras também são exibidas em telas menores; aumentar a tipografia
+    # mantém títulos, eixos, marcas e legendas legíveis depois da redução.
+    plt.rcParams.update(
+        {
+            "font.size": 13,
+            "axes.titlesize": 18,
+            "axes.labelsize": 14,
+            "xtick.labelsize": 12,
+            "ytick.labelsize": 12,
+            "legend.fontsize": 12,
+            "legend.title_fontsize": 12,
+        }
+    )
     counts = counts.copy()
     national = counts.groupby("week_start", as_index=False)["cases"].sum().sort_values("week_start")
     national["rolling_4w"] = national["cases"].rolling(4, min_periods=1).mean()
-    fig, ax = plt.subplots(figsize=(12, 5.5))
-    ax.plot(national["week_start"], national["rolling_4w"], color="#087E8B", linewidth=1.8)
+    fig, ax = plt.subplots(figsize=(14, 7))
+    ax.plot(national["week_start"], national["rolling_4w"], color="#087E8B", linewidth=2.4)
     ax.set(title="Dengue no Brasil: notificações prováveis por semana de início dos sintomas", xlabel="Semana", ylabel="Casos (média móvel de 4 semanas)")
     ax.ticklabel_format(axis="y", style="plain")
     fig.tight_layout()
@@ -423,12 +436,18 @@ def save_figures(
     plt.close(fig)
 
     annual = counts.groupby("onset_year", as_index=False)["cases"].sum()
-    fig, ax = plt.subplots(figsize=(10, 5.5))
+    fig, ax = plt.subplots(figsize=(13, 7))
     colors = ["#F26419" if year in (2024, 2025) else "#2E86AB" for year in annual["onset_year"]]
     ax.bar(annual["onset_year"].astype(str), annual["cases"], color=colors)
     ax.set(title="Notificações prováveis por ano epidemiológico", xlabel="Ano", ylabel="Casos")
     ax.ticklabel_format(axis="y", style="plain")
-    ax.tick_params(axis="x", rotation=45)
+    ax.tick_params(axis="x", rotation=0)
+    for bar, cases in zip(ax.patches, annual["cases"]):
+        ax.annotate(
+            f"{cases / 1_000_000:.2f} mi",
+            (bar.get_x() + bar.get_width() / 2, bar.get_height()),
+            xytext=(0, 7), textcoords="offset points", ha="center", fontsize=11,
+        )
     fig.tight_layout()
     fig.savefig(FIGURES / "casos_por_ano.png", dpi=180)
     plt.close(fig)
@@ -438,7 +457,7 @@ def save_figures(
     recent = recent[recent["population_2022"].fillna(0).ge(20_000)].copy()
     recent["incidence_per_100k_2022"] = recent["cases"] / recent["population_2022"] * 100_000
     top = recent.nlargest(15, "incidence_per_100k_2022").sort_values("incidence_per_100k_2022")
-    fig, ax = plt.subplots(figsize=(10, 7))
+    fig, ax = plt.subplots(figsize=(13, 9))
     ax.barh(top["municipality"] + " (" + top["uf"] + ")", top["incidence_per_100k_2022"], color="#F26419")
     ax.set(title="15 maiores incidências municipais em 2024\n(população do Censo 2022; municípios com ≥20 mil habitantes)", xlabel="Casos por 100 mil habitantes")
     fig.tight_layout()
@@ -448,14 +467,14 @@ def save_figures(
     test = predictions[predictions["target_year"].isin([2024, 2025])].copy()
     test["target_week"] = pd.to_datetime(test["target_week"])
     weekly = test.groupby(["target_week", "target_year"], as_index=False)[["target", "prediction", "pred_last_week", "pred_seasonal"]].sum()
-    fig, ax = plt.subplots(figsize=(12, 5.5))
-    ax.plot(weekly["target_week"], weekly["target"], label="Observado", color="#222222", linewidth=1.8)
+    fig, ax = plt.subplots(figsize=(14, 7))
+    ax.plot(weekly["target_week"], weekly["target"], label="Observado", color="#222222", linewidth=2.4)
     ax.plot(weekly["target_week"], weekly["prediction"], label="LightGBM", color="#F26419", alpha=0.9)
     ax.plot(weekly["target_week"], weekly["pred_last_week"], label="Última semana", color="#2E86AB", alpha=0.85)
     ax.plot(weekly["target_week"], weekly["pred_seasonal"], label="Mesmo período há 52 semanas", color="#9C89B8", alpha=0.8)
     ax.set(title="Previsão semanal agregada: teste temporal 2024–2025", xlabel="Semana de destino", ylabel="Casos prováveis")
     ax.ticklabel_format(axis="y", style="plain")
-    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=2))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
     ax.legend(frameon=False, ncol=3, loc="upper left")
     fig.tight_layout()
@@ -468,10 +487,12 @@ def save_figures(
         metrics["period"].isin(["2024", "2025"])
         & metrics["model"].isin(["Última semana", "LightGBM"])
     ].copy()
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(12, 7))
     order = ["Última semana", "LightGBM"]
     piv = test_metrics.pivot(index="period", columns="model", values="wape")[order] * 100
     piv.plot(kind="bar", ax=ax, color=["#2E86AB", "#F26419"])
+    for container in ax.containers:
+        ax.bar_label(container, fmt="%.1f%%", padding=5, fontsize=12)
     ax.set(title="Previsão de casos: LightGBM versus persistência", xlabel="Ano de teste", ylabel="WAPE (%) — menor é melhor")
     ax.legend(title="Modelo", frameon=False)
     ax.tick_params(axis="x", rotation=0)
@@ -481,9 +502,11 @@ def save_figures(
 
     capture_plot = capture.copy()
     capture_plot["case_capture"] *= 100
-    fig, ax = plt.subplots(figsize=(9, 5))
+    fig, ax = plt.subplots(figsize=(12, 7))
     capture_pivot = capture_plot.pivot(index="year", columns="model", values="case_capture")
     capture_pivot[["Última semana", "LightGBM"]].plot(kind="bar", ax=ax, color=["#2E86AB", "#F26419"])
+    for container in ax.containers:
+        ax.bar_label(container, fmt="%.1f%%", padding=4, fontsize=12)
     ax.set(title="Casos capturados ao alertar 10% dos municípios por semana", xlabel="Ano de teste", ylabel="Casos observados capturados (%)")
     ax.set_ylim(0, 100)
     ax.legend(title="Ordenação por previsão", frameon=False)
