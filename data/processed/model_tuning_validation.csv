@@ -1,0 +1,6 @@
+family,candidate,validation_wape,params
+LightGBM L1,1,0.39251632071256803,"{""learning_rate"": 0.05, ""max_bin"": 63, ""min_child_samples"": 40, ""n_estimators"": 200, ""n_jobs"": 8, ""num_leaves"": 15, ""objective"": ""regression_l1"", ""random_state"": 42, ""reg_lambda"": 2.0, ""verbosity"": -1}"
+LightGBM L1,2,0.3651891761695553,"{""learning_rate"": 0.05, ""max_bin"": 63, ""min_child_samples"": 100, ""n_estimators"": 200, ""n_jobs"": 8, ""num_leaves"": 31, ""objective"": ""regression_l1"", ""random_state"": 42, ""reg_lambda"": 2.0, ""verbosity"": -1}"
+LightGBM L1,3,0.36415050150353395,"{""learning_rate"": 0.05, ""max_bin"": 63, ""min_child_samples"": 40, ""n_estimators"": 400, ""n_jobs"": 8, ""num_leaves"": 31, ""objective"": ""regression_l1"", ""random_state"": 42, ""reg_lambda"": 2.0, ""verbosity"": -1}"
+LightGBM Poisson,1,5.333941253765695,"{""learning_rate"": 0.02, ""max_bin"": 63, ""min_child_samples"": 40, ""n_estimators"": 200, ""n_jobs"": 8, ""num_leaves"": 31, ""objective"": ""poisson"", ""random_state"": 42, ""reg_lambda"": 2.0, ""verbosity"": -1}"
+LightGBM Poisson,2,0.6526472908979672,"{""learning_rate"": 0.01, ""max_bin"": 63, ""min_child_samples"": 40, ""n_estimators"": 200, ""n_jobs"": 8, ""num_leaves"": 31, ""objective"": ""poisson"", ""random_state"": 42, ""reg_lambda"": 2.0, ""verbosity"": -1}"

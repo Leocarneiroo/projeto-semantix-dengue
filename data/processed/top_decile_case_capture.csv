@@ -1,0 +1,7 @@
+year,model,alert_share,case_capture
+2024,Última semana,0.1,0.8494094797557697
+2024,Mesmo período há 52 semanas,0.1,0.6128068418250183
+2024,LightGBM,0.1,0.8500920672078889
+2025,Última semana,0.1,0.8727567371018871
+2025,Mesmo período há 52 semanas,0.1,0.6110432041409342
+2025,LightGBM,0.1,0.8750176932082615

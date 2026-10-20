@@ -1,0 +1,52 @@
+{
+  "source_extraction_date": "2026-10-19",
+  "years": [
+    2015,
+    2016,
+    2017,
+    2018,
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025
+  ],
+  "municipalities_in_ibge_reference": 5571,
+  "municipalities_with_cases": 5560,
+  "total_probable_notifications": 17502344,
+  "unmatched_municipality_cases_excluded": 22817,
+  "es_cases_excluded_from_2020_onward_due_to_source_transition": 335447,
+  "annual_cases": {
+    "2015": 1620582,
+    "2016": 1492857,
+    "2017": 239143,
+    "2018": 262026,
+    "2019": 1542906,
+    "2020": 936839,
+    "2021": 530610,
+    "2022": 1386683,
+    "2023": 1503494,
+    "2024": 6394785,
+    "2025": 1592419
+  },
+  "validation_year": 2023,
+  "test_years": [
+    2024,
+    2025
+  ],
+  "model": {
+    "objective": "regression_l1",
+    "n_estimators": 200,
+    "learning_rate": 0.05,
+    "num_leaves": 31,
+    "max_bin": 63,
+    "min_child_samples": 40,
+    "reg_lambda": 2.0,
+    "n_jobs": 8,
+    "verbosity": -1,
+    "random_state": 42
+  },
+  "elapsed_seconds": 70.7
+}
