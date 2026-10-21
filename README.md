@@ -2,7 +2,7 @@
 
 Projeto de ciência de dados para estimar a quantidade de notificações prováveis de dengue na semana seguinte por município. O objetivo é demonstrar como dados públicos podem apoiar vigilância epidemiológica e planejamento de equipes e insumos.
 
-> **Resultado versionado:** no teste de 2024, a execução anterior teve WAPE de 45,8% no LightGBM e 41,0% no Random Forest, contra 26,1% na persistência. Esses números precedem a inclusão de clima e dependência espacial; o backtest não valida prevenção nem operação de alertas.
+> **Resultado atualizado:** com clima NASA POWER e vizinhança, WAPE no teste de 2024 foi 44,0% no LightGBM enriquecido, 41,1% no Random Forest e 26,1% na persistência. Em 2025, foram 34,1%, 33,3% e 31,3%, respectivamente. O backtest não valida prevenção nem operação de alertas.
 
 ## Visualização
 
@@ -25,12 +25,12 @@ O [relatório completo](relatorio.md) está organizado nos tópicos obrigatório
 - **SINAN / Ministério da Saúde:** microdados anuais de dengue, agregados neste projeto por município de residência e semana de início dos sintomas. [Portal de Dados Abertos do SUS](https://dadosabertos.saude.gov.br/dataset/arboviroses-dengue)
 - **IBGE:** população municipal do Censo 2022, usada como denominador em comparações de incidência. [API de Agregados do IBGE](https://servicodados.ibge.gov.br/api/v3/agregados/4714/periodos/2022/variaveis/93?localidades=N6%5Ball%5D)
 - **IBGE — malha municipal:** polígonos usados para obter pontos representativos e vizinhança Queen entre municípios. [Malhas territoriais](https://www.ibge.gov.br/geociencias/organizacao-do-territorio/malhas-territoriais/15774-malhas.html)
-- **Open-Meteo / ERA5:** precipitação, temperatura média e umidade relativa histórica por município. A API gratuita permite uso não comercial, tem limite diário e não garante disponibilidade. [Documentação](https://open-meteo.com/en/docs/historical-weather-api), [termos](https://open-meteo.com/en/terms)
+- **NASA POWER / MERRA-2:** precipitação corrigida (`PRECTOTCORR`), temperatura a 2 m (`T2M`) e umidade relativa a 2 m (`RH2M`), agregadas por município e semana. Grade meteorológica nativa de 0,5° de latitude × 0,625° de longitude. [Documentação da API diária](https://power.larc.nasa.gov/docs/services/api/temporal/daily/), [parâmetros](https://power.larc.nasa.gov/parameters/)
 - **Semantix:** a conexão de negócio é com o portfólio divulgado para saúde, integração de dados e tecnologia preditiva. [Semantix Saúde](https://semantix.ai/industries/saude/)
 
 ## Como reproduzir
 
-Requer Python 3.10+ e conexão à internet. A primeira execução baixa os CSVs oficiais do SINAN de 2015 a 2025; os arquivos compactados ocupam aproximadamente 500 MB. O pipeline também busca malha do IBGE e clima ERA5. O clima é coletado em lotes com cache local; limites da API podem exigir novas tentativas. A API gratuita Open-Meteo é só para uso não comercial. Os microdados SINAN ficam em `data/raw/` e não devem ser publicados no repositório.
+Requer Python 3.10+ e conexão à internet. A primeira execução completa baixa os CSVs oficiais do SINAN de 2015 a 2025; os arquivos compactados ocupam aproximadamente 500 MB. O pipeline também busca malha do IBGE e clima diário da NASA POWER. A coleta climática é dividida em blocos regionais anuais e cacheada para permitir retomada; a API limita cada consulta regional a uma variável, 366 dias e área de até 10° por lado. Os microdados SINAN ficam em `data/raw/` e não devem ser publicados no repositório.
 
 ```bash
 python -m venv .venv
@@ -51,7 +51,8 @@ python -m src.compare_models
 - `data/processed/model_comparison_metrics.csv`: métricas nacionais e por UF, ano e modelo.
 - `data/processed/model_tuning_validation.csv`: WAPE por candidato e fold temporal da busca LightGBM.
 - `data/processed/model_comparison_predictions.csv.gz`: previsões comparadas, com município e UF.
-- `data/processed/municipality_week_weather.csv.gz`: cache semanal de clima; recriado se removido.
+- `data/processed/municipality_week_weather_nasa_power.csv.gz`: cache semanal NASA POWER; recriado se removido.
+- `data/processed/weather_nasa_power_tiles/`: blocos anuais regionais cacheados para retomar coleta interrompida.
 - `data/processed/ibge_municipal_geometry.csv` e `municipal_neighbors.csv`: coordenadas municipais e pesos Queen normalizados.
 - `src/analyze.py`: pipeline de download, agregação, modelagem e visualização.
 - `src/environmental_features.py`: baixa/cacheia clima histórico e malha municipal, cria vizinhança Queen.

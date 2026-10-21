@@ -4,7 +4,7 @@
 
 Este projeto avalia se dados públicos do SINAN permitem prever o volume de notificações prováveis de dengue na semana seguinte, por município. A aplicação pretendida é apoiar vigilância epidemiológica no planejamento agregado de equipes e insumos. O tema também se conecta à oferta de IA preditiva e integração de dados de saúde divulgada pela [Semantix Saúde](https://semantix.ai/industries/saude/).
 
-A análise encontrou um pico excepcional em 2024: **6,39 milhões** de notificações prováveis após os filtros deste estudo, com pico semanal de **422.751** casos na semana iniciada em 17 de março. Os modelos estimam notificações da semana seguinte por município; não preveem diretamente o início de uma epidemia. A comparação publicada ainda reflete a execução anterior, sem clima e vizinhança espacial: Random Forest melhorou sobre LightGBM, mas nenhum superou repetir os casos da semana atual. O backtest não demonstra que um alerta teria evitado casos.
+A análise encontrou um pico excepcional em 2024: **6,39 milhões** de notificações prováveis após os filtros deste estudo, com pico semanal de **422.751** casos na semana iniciada em 17 de março. Os modelos estimam notificações da semana seguinte por município; não preveem diretamente o início de uma epidemia. Na comparação atualizada com NASA POWER e vizinhança espacial, o WAPE do LightGBM enriquecido ficou próximo ao modelo base, com pequena piora em 2024 e melhora em 2025; nenhum modelo superou a persistência. O backtest não demonstra que um alerta teria evitado casos.
 
 ## Coleta de dados
 
@@ -13,7 +13,9 @@ A análise encontrou um pico excepcional em 2024: **6,39 milhões** de notifica�
 - **SINAN/DATASUS — dengue:** arquivos anuais públicos em CSV, de 2015 a 2025. O Ministério da Saúde descreve casos prováveis como notificações suspeitas, exceto casos descartados, e recomenda município de residência para incidência. [Portal de Dados Abertos do SUS](https://dadosabertos.saude.gov.br/dataset/arboviroses-dengue)
 - **IBGE — população municipal:** Censo 2022, tabela 4714, variável “População residente”. Usada como denominador comum para comparar incidência entre municípios. [API do IBGE](https://servicodados.ibge.gov.br/api/v3/agregados/4714/periodos/2022/variaveis/93?localidades=N6%5Ball%5D)
 - **IBGE — malha municipal:** polígonos de municípios usados para obter pontos representativos e vizinhança por contiguidade Queen. [Malhas territoriais do IBGE](https://www.ibge.gov.br/geociencias/organizacao-do-territorio/malhas-territoriais/15774-malhas.html)
-- **Open-Meteo — ERA5:** precipitação, temperatura média e umidade relativa histórica. A API gratuita é para uso não comercial, tem limite de chamadas e não garante disponibilidade. [Documentação histórica](https://open-meteo.com/en/docs/historical-weather-api), [termos de uso](https://open-meteo.com/en/terms)
+- **NASA POWER — MERRA-2/POWER:** precipitação corrigida (`PRECTOTCORR`), temperatura média a 2 m (`T2M`) e umidade relativa a 2 m (`RH2M`). Os dados diários são agregados por município e semana pela célula de grade mais próxima. [API diária](https://power.larc.nasa.gov/docs/services/api/temporal/daily/), [parâmetros](https://power.larc.nasa.gov/parameters/)
+
+O clima semanal está disponível para **5.559 dos 5.571 códigos** da malha de referência. Um município não tem geometria na malha atual; outros 11 não receberam série ao associar os pontos representativos à grade NASA. Permanecem como valores ausentes nas features; o LightGBM os aceita sem preenchimento artificial.
 
 Extração executada em **19/10/2026**. Os microdados foram processados localmente e não fazem parte da entrega; os arquivos publicados pelo projeto são agregados por município e semana.
 
@@ -31,7 +33,7 @@ O alvo foi construído com município de residência (`ID_MN_RESI`) e data de in
 | Quebra do ES | Exclui registros do Espírito Santo desde 2020 por mudança de sistema | Evita interpretar uma quebra de cobertura como queda real; 335.447 notificações foram excluídas |
 | Painel semanal | Cria linha para cada município e semana; semanas sem registro recebem zero | Completa a série, mas zero significa “nenhuma notificação registrada”, não “nenhuma infecção” |
 
-População do Censo 2022 é usada somente no gráfico de incidência municipal; não entra como variável de previsão. O modelo usa histórico de notificações, município/UF, posição sazonal, clima semanal observado e casos dos municípios vizinhos na semana observada. Os dados meteorológicos são reanálise em grade, não medições em cada município; pontos representativos e resolução do ERA5 suavizam diferenças locais.
+População do Censo 2022 é usada somente no gráfico de incidência municipal; não entra como variável de previsão. O modelo usa histórico de notificações, município/UF, posição sazonal, clima semanal observado e casos dos municípios vizinhos na semana observada. Os dados meteorológicos são estimativas em grade MERRA-2, não medições em cada município. A resolução nativa de 0,5° de latitude × 0,625° de longitude suaviza diferenças locais; municípios próximos podem compartilhar a mesma célula.
 
 A defasagem espacial é `W*y`: média ponderada dos casos observados nos municípios contíguos, com pesos Queen normalizados por linha. Ela entra como variável preditiva do LightGBM; não estima um modelo SAR/SEM completo nem identifica efeito causal. Municípios sem vizinho contíguo ficam sem valor espacial. Usa-se a malha IBGE vigente no momento da execução; mudanças recentes de limites podem diferir do território durante os anos históricos. A malha e o cache climático são salvos em `data/processed/` para evitar baixar tudo novamente.
 
@@ -86,44 +88,47 @@ Métricas: MAE e RMSE por município-semana; WAPE para comparar o erro absoluto 
 
 ### Resultados
 
-**As métricas abaixo são da extração versionada anterior à inclusão de clima e dependência espacial.** A tentativa de atualizar os resultados foi bloqueada pelo limite por minuto da API meteorológica; rode `python -m src.compare_models` após a coleta para gerar a tabela atualizada. Não interprete os números abaixo como avaliação do modelo enriquecido.
+**As métricas abaixo usam a série SINAN versionada e a comparação atualizada com NASA POWER.** A validação ocorre em 2023; o teste final permanece reservado em 2024–2025.
 
 | Ano | Modelo | MAE | RMSE | WAPE |
 |---:|---|---:|---:|---:|
 | 2023 (validação) | Persistência | 1,77 | 13,32 | 33,7% |
-| 2023 (validação) | LightGBM | 1,92 | 31,19 | 36,5% |
+| 2023 (validação) | LightGBM base | 1,86 | 29,33 | 35,4% |
+| 2023 (validação) | LightGBM clima + espacial | 1,85 | 28,42 | 35,1% |
 | 2024 (teste) | Persistência | 5,84 | 72,04 | 26,1% |
-| 2024 (teste) | LightGBM | 10,25 | 327,66 | 45,8% |
+| 2024 (teste) | LightGBM base | 9,84 | 322,40 | 44,0% |
+| 2024 (teste) | LightGBM clima + espacial | 9,86 | 323,67 | 44,0% |
 | 2025 (teste) | Persistência | 1,74 | 13,43 | 31,3% |
-| 2025 (teste) | LightGBM | 1,94 | 33,38 | 34,9% |
+| 2025 (teste) | LightGBM base | 1,92 | 32,49 | 34,5% |
+| 2025 (teste) | LightGBM clima + espacial | 1,90 | 31,68 | 34,1% |
 
-O baseline de persistência teve menor erro nos dois anos de teste. O sazonal de 52 semanas foi especialmente fraco: WAPE de 95,6% em 2024 e 380,4% em 2025, evidência de que repetir o padrão do ano anterior não lidou bem com a mudança de escala do surto de 2024.
+O baseline de persistência teve menor erro nos dois anos de teste. Clima e vizinhança reduziram o WAPE do LightGBM base em 0,4 ponto percentual em 2025; em 2024, aumentaram 0,1 ponto. Nenhum modelo superou a persistência. O sazonal de 52 semanas foi especialmente fraco: WAPE de 95,6% em 2024 e 380,4% em 2025, evidência de que repetir o padrão do ano anterior não lidou bem com a mudança de escala do surto de 2024.
 
 O total anual descritivo de 2025 (1.592.419) inclui a semana iniciada em **28/12/2025**, com 2.826 notificações. Essa semana termina em janeiro de 2026 e fica fora da janela de teste, que considera apenas semanas-alvo encerradas até 31/12/2025; por isso, o total de 2025 nas métricas é 1.589.593.
 
-Ao ordenar municípios por previsão e alertar os 10% do topo por semana, o LightGBM capturou 85,0% dos casos em 2024 e 87,5% em 2025. A persistência capturou 84,9% e 87,3%, respectivamente. A diferença é pequena e não compensa o erro maior nas previsões de volume.
+Ao ordenar municípios por previsão e alertar os 10% do topo por semana, o LightGBM com clima e vizinhança capturou 85,0% dos casos em 2024 e 87,5% em 2025. A persistência capturou 84,9% e 87,3%, respectivamente. A diferença é pequena e não compensa o erro maior nas previsões de volume.
 
 ### Comparação com outros modelos
 
-Na execução versionada anterior, também foram testados Random Forest, LightGBM Poisson e uma busca curta de parâmetros. Esses números abaixo não incluem clima, vizinhança espacial, métricas por UF nem validação expansiva. A implementação atual compara Random Forest e Poisson com LightGBM base/enriquecido; usa busca de 12 configurações em três anos de validação e grava métricas por UF.
+Também foram comparados sazonal, Random Forest, LightGBM Poisson e duas versões LightGBM. A seleção usa busca de 12 configurações em três anos de validação e grava métricas por UF.
 
 | Modelo | WAPE 2023 (validação) | WAPE 2024 (teste) | WAPE 2025 (teste) |
 |---|---:|---:|---:|
-| Persistência (última semana) | 33,7% | **26,1%** | **31,3%** |
+| Persistência (última semana) | **33,7%** | **26,1%** | **31,3%** |
 | Sazonal (52 semanas) | 132,2% | 95,6% | 380,4% |
-| LightGBM atual | 36,5% | 45,8% | 34,9% |
-| LightGBM ajustado | 36,4% | 45,8% | 35,0% |
-| LightGBM Poisson | 65,3% | 57,0% | 61,5% |
-| Random Forest (amostra) | 35,0% | 41,0% | 33,4% |
+| LightGBM base | 35,4% | 44,0% | 34,5% |
+| LightGBM clima + espacial | 35,1% | 44,0% | 34,1% |
+| Random Forest (amostra) | 35,3% | 41,1% | 33,3% |
+| LightGBM Poisson (enriquecido) | Instável | Instável | 7.781,7% |
 
-O Random Forest melhorou sobre LightGBM nos três anos, mas **não superou persistência em nenhum dos três anos**. O ajuste de parâmetros do LightGBM praticamente não mudou o teste. Poisson ficou bem atrás. A captura do top 10% ficou quase empatada entre persistência e modelos de árvore: a diferença foi inferior a 0,3 ponto percentual em cada ano. Essa métrica de ordenação não compensou o maior erro de contagem.
+O Random Forest teve menor WAPE que as versões LightGBM nos três anos, mas **não superou persistência em nenhum dos dois anos de teste**. Clima e vizinhança trouxeram ganho modesto em 2025 e pequena piora em 2024. Poisson foi numericamente instável, com WAPE de 2,9×10¹¹% em 2024 e 7.781,7% em 2025; esse modelo não é interpretável como previsão útil. A captura do top 10% ficou quase empatada entre persistência e modelos de árvore: diferença inferior a 0,3 ponto percentual nos testes.
 
-Os resultados atualizados ficam em `data/processed/model_comparison_metrics.csv`; as configurações e seus resultados por fold ficam em `data/processed/model_tuning_validation.csv`; as previsões municipais ficam em `data/processed/model_comparison_predictions.csv.gz`. Para repetir a comparação: `python -m src.compare_models`. Na primeira execução, a coleta ERA5 pode pausar em respostas HTTP 429 e retomar do cache de lotes. O cache gratuito da Open-Meteo serve somente para uso não comercial.
+Os resultados atualizados ficam em `data/processed/model_comparison_metrics.csv`; as configurações e seus resultados por fold ficam em `data/processed/model_tuning_validation.csv`; as previsões municipais ficam em `data/processed/model_comparison_predictions.csv.gz`. Para repetir a comparação: `python -m src.compare_models`. Na primeira execução, a coleta NASA POWER requer até 720 consultas regionais (tiles de 10°, anos e variáveis) e pode ser retomada do cache `data/processed/weather_nasa_power_tiles/` após interrupção. A API aceita no máximo 366 dias e uma variável por consulta regional.
 
 ### O que os números permitem inferir
 
 - **Volume e localização:** esta extração descreve onde e quando as notificações prováveis foram registradas, dentro das regras e limitações acima. Em 2024 houve um pico muito maior que nos demais anos da série.
-- **Persistência de curto prazo:** repetir a semana atual foi uma referência forte. No teste de 2024, WAPE foi **26,1%** para persistência contra **45,8%** para LightGBM; em 2025, **31,3%** contra **34,9%**. Menor WAPE significa menor erro total relativo.
+- **Persistência de curto prazo:** repetir a semana atual foi uma referência forte. No teste de 2024, WAPE foi **26,1%** para persistência contra **44,0%** para LightGBM com clima e vizinhança; em 2025, **31,3%** contra **34,1%**. Menor WAPE significa menor erro total relativo.
 - **Priorização, com ressalvas:** escolher os 10% de municípios com maiores previsões teria concentrado cerca de **85%** das notificações de 2024 no conjunto avaliado. A persistência capturou quase a mesma proporção; então o LightGBM não mostrou ganho relevante nessa triagem.
 - **Não é risco individual:** o alvo é contagem agregada de notificações por município e semana. Não estima quem vai adoecer, gravidade, hospitalização ou morte.
 - **Não prova causa:** associações temporais e mapas não dizem que chuva, uma ação municipal ou o modelo causaram aumento ou redução de casos. A análise não compara intervenções.
@@ -149,4 +154,4 @@ Portanto, o resultado atual é **um estudo retrospectivo de previsão de notific
 3. **Ainda não há evidência de prevenção:** não avaliamos resposta a alertas nem comparamos municípios que receberam ações com grupos de comparação.
 4. **Limitação de uso real:** atraso/revisão de dados e exclusão do ES desde 2020 afastam o backtest da operação ao vivo.
 
-Próximos passos prioritários: (1) atualizar métricas e gráficos depois de concluir o cache ERA5; (2) reconstruir snapshots semanais para usar apenas notificações conhecidas na data da previsão; (3) definir e avaliar formalmente surtos, antecedência, falsos alertas e surtos não detectados; (4) avaliar previsões probabilísticas e uma fonte comparável para o ES. Para alegar prevenção, seria necessário avaliar prospectivamente se as ações acionadas por alertas reduzem desfechos, controlando diferenças entre locais e períodos. A OMS também recomenda usar indicadores e resposta definidos para o contexto local, em vez de tratar uma previsão isolada como intervenção ([guia técnico de vigilância e resposta](https://www.who.int/publications/i/item/9789241549738)).
+Próximos passos prioritários: (1) reconstruir snapshots semanais para usar apenas notificações conhecidas na data da previsão; (2) definir e avaliar formalmente surtos, antecedência, falsos alertas e surtos não detectados; (3) avaliar previsões probabilísticas e uma fonte comparável para o ES. Para alegar prevenção, seria necessário avaliar prospectivamente se as ações acionadas por alertas reduzem desfechos, controlando diferenças entre locais e períodos. A OMS também recomenda usar indicadores e resposta definidos para o contexto local, em vez de tratar uma previsão isolada como intervenção ([guia técnico de vigilância e resposta](https://www.who.int/publications/i/item/9789241549738)).

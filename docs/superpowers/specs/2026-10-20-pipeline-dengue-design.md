@@ -7,10 +7,10 @@ Ampliar o pipeline existente com variáveis meteorológicas, dependência espaci
 ## Escopo aprovado
 
 1. **Clima por município e semana**
-   - Buscar dados históricos ERA5 por coordenadas municipais, em lotes e com cache local.
+   - Buscar dados meteorológicos diários NASA POWER/MERRA-2 por regiões e anos, com cache local retomável.
    - Incorporar precipitação acumulada, temperatura média e umidade relativa média semanal.
    - Para prever a semana seguinte, usar apenas clima da semana observada e resumos anteriores. Não usar clima futuro nem previsão meteorológica retrospectiva como se estivesse disponível no instante da previsão.
-   - Registrar fonte, período e variáveis no relatório. A API gratuita Open-Meteo é destinada a uso não comercial; o pipeline deve documentar essa condição.
+   - Registrar fonte, período, variáveis e grade aproximada de 0,5° × 0,625° no relatório.
 
 2. **Dependência espacial**
    - Construir matriz de vizinhança municipal a partir da malha municipal mais recente do IBGE, com contiguidade Queen e pesos normalizados por linha.
@@ -29,7 +29,7 @@ Ampliar o pipeline existente com variáveis meteorológicas, dependência espaci
 ## Fluxo de dados
 
 1. A referência municipal recebe coordenadas compatíveis com o código IBGE.
-2. O coletor obtém clima ERA5 por lotes, agrega por município e semana e salva cache reutilizável.
+2. O coletor obtém clima NASA POWER diário em tiles regionais de até 10° e fatias anuais de até 366 dias, associa municípios à célula de grade mais próxima, agrega por município e semana e salva cache reutilizável.
 3. A malha do IBGE gera a matriz Queen; a série municipal gera defasagens espaciais semanais.
 4. O painel une as variáveis climáticas e espaciais usando município e semana.
 5. Modelos base e ampliado são avaliados nos mesmos recortes temporais; métricas são gravadas no nível anual e estadual.
@@ -37,8 +37,8 @@ Ampliar o pipeline existente com variáveis meteorológicas, dependência espaci
 
 ## Limitações e decisões
 
-- ERA5 representa reanálise em grade, não medição meteorológica pontual em cada município; pontos representativos e grade podem suavizar variação intramunicipal. A malha IBGE vigente pode divergir dos limites municipais históricos.
-- A API climática gratuita tem limites e licença de uso não comercial. O cache evita chamadas repetidas, mas não remove a necessidade de respeitar os termos da fonte.
+- NASA POWER/MERRA-2 representa dados meteorológicos em grade de 0,5° de latitude × 0,625° de longitude, não medição pontual municipal; a resolução pode suavizar variação intramunicipal. A malha IBGE vigente pode divergir dos limites municipais históricos.
+- A API regional limita cada consulta a uma variável, 366 dias e uma área de até 10° por lado. O cache de tile/ano/variável permite retomada sem refazer blocos já concluídos.
 - Municípios sem vizinhos contíguos precisam de tratamento determinístico e documentado; não podem receber um valor espacial inventado.
 - A defasagem `W*y` é uma feature espacial preditiva, não um modelo SAR/SEM completo nem estimativa causal.
 - Métricas por UF em volume desigual podem variar por tamanho estadual; incluir contagem de municípios e casos junto às métricas.

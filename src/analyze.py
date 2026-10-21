@@ -577,7 +577,7 @@ def main() -> None:
         "validation_year": 2023,
         "test_years": [2024, 2025],
         "features": features,
-        "weather_source": "Open-Meteo Historical Weather API (ERA5)",
+        "weather_source": "NASA POWER Daily API (MERRA-2/POWER)",
         "weather_municipalities": int(weather["municipality_code"].nunique()),
         "weather_missing_panel_rows": int(panel["relative_humidity_pct"].isna().sum()),
         "spatial_weights": "IBGE municipality Queen contiguity, row-normalized",

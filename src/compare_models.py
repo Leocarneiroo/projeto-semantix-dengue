@@ -8,6 +8,8 @@ import time
 from pathlib import Path
 
 import lightgbm as lgb
+import matplotlib.dates as mdates
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
@@ -82,6 +84,70 @@ def _metrics_for_model(rows: pd.DataFrame, period: int) -> list[dict[str, object
     for uf in sorted(rows["uf"].dropna().astype(str).unique()):
         output.append(_metrics(rows, period, geography="UF", code=uf))
     return output
+
+
+def _save_comparison_figures(predictions: pd.DataFrame, metrics: pd.DataFrame) -> None:
+    plt.style.use("seaborn-v0_8-whitegrid")
+    plt.rcParams.update({"font.size": 12, "axes.titlesize": 17, "axes.labelsize": 13})
+    test = predictions.loc[predictions["target_year"].isin([2024, 2025])].copy()
+    test["target_week"] = pd.to_datetime(test["target_week"], format="mixed")
+    weekly = test.groupby(["model", "target_week"], as_index=False)[["target", "prediction"]].sum()
+    observed = weekly.loc[weekly["model"].eq("Persistência")]
+    fig, ax = plt.subplots(figsize=(14, 7))
+    ax.plot(observed["target_week"], observed["target"], label="Observado", color="#222222", linewidth=2.4)
+    for model, label, color in (
+        ("Persistência", "Persistência", "#2E86AB"),
+        ("LightGBM clima+espacial", "LightGBM clima+espacial", "#F26419"),
+    ):
+        frame = weekly.loc[weekly["model"].eq(model)]
+        ax.plot(frame["target_week"], frame["prediction"], label=label, color=color, alpha=0.9)
+    ax.set(title="Previsão semanal agregada: teste temporal 2024–2025", xlabel="Semana de destino", ylabel="Notificações prováveis")
+    ax.ticklabel_format(axis="y", style="plain")
+    ax.xaxis.set_major_locator(mdates.MonthLocator(interval=3))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%b\n%Y"))
+    ax.legend(frameon=False, ncol=3, loc="upper left")
+    fig.tight_layout()
+    fig.savefig(analyze.FIGURES / "teste_previsao_semanal.png", dpi=180)
+    plt.close(fig)
+
+    selected = ["Persistência", "Random Forest (amostra)", "LightGBM base", "LightGBM clima+espacial"]
+    brazil = metrics.loc[
+        metrics["geography_level"].eq("Brasil")
+        & metrics["period"].isin([2024, 2025])
+        & metrics["model"].isin(selected)
+    ]
+    labels = {
+        "Persistência": "Persistência",
+        "Random Forest (amostra)": "Random Forest",
+        "LightGBM base": "LightGBM base",
+        "LightGBM clima+espacial": "LightGBM clima+espacial",
+    }
+    fig, ax = plt.subplots(figsize=(13, 7))
+    table = brazil.assign(model=brazil["model"].map(labels)).pivot(index="period", columns="model", values="wape")[list(labels.values())] * 100
+    table.plot(kind="bar", ax=ax, color=["#2E86AB", "#9C89B8", "#F6AE2D", "#F26419"])
+    for container in ax.containers:
+        ax.bar_label(container, fmt="%.1f%%", padding=3, fontsize=10)
+    ax.set(title="Erro de previsão por modelo", xlabel="Ano de teste", ylabel="WAPE (%) — menor é melhor")
+    ax.legend(title="Modelo", frameon=False)
+    ax.tick_params(axis="x", rotation=0)
+    fig.tight_layout()
+    fig.savefig(analyze.FIGURES / "metricas_teste.png", dpi=180)
+    plt.close(fig)
+
+    capture = brazil.assign(model=brazil["model"].map(labels)).pivot(
+        index="period", columns="model", values="top_10pct_case_capture",
+    )[list(labels.values())] * 100
+    fig, ax = plt.subplots(figsize=(13, 7))
+    capture.plot(kind="bar", ax=ax, color=["#2E86AB", "#9C89B8", "#F6AE2D", "#F26419"])
+    for container in ax.containers:
+        ax.bar_label(container, fmt="%.1f%%", padding=3, fontsize=10)
+    ax.set(title="Casos capturados ao priorizar 10% dos municípios", xlabel="Ano de teste", ylabel="Casos observados capturados (%)")
+    ax.set_ylim(0, 100)
+    ax.legend(title="Ordenação por previsão", frameon=False)
+    ax.tick_params(axis="x", rotation=0)
+    fig.tight_layout()
+    fig.savefig(analyze.FIGURES / "captura_top_10pct.png", dpi=180)
+    plt.close(fig)
 
 
 def _fit_lgbm(
@@ -245,6 +311,7 @@ def run_comparison() -> tuple[pd.DataFrame, pd.DataFrame]:
         for year in (2023, 2024, 2025)
         for metric in _metrics_for_model(predictions.loc[predictions["model"].eq(model)], year)
     ])
+    _save_comparison_figures(predictions, metrics)
     metrics.to_csv(processed / "model_comparison_metrics.csv", index=False)
     tuning.to_csv(processed / "model_tuning_validation.csv", index=False)
     analyze.write_csv_atomic(predictions, processed / "model_comparison_predictions.csv.gz")
@@ -258,6 +325,7 @@ def run_comparison() -> tuple[pd.DataFrame, pd.DataFrame]:
         "selected_params": params,
         "selection_metric": "mean WAPE over expanding validation folds 2021-2023",
         "test_years": [2024, 2025],
+        "weather_source": "NASA POWER Daily API (MERRA-2/POWER)",
         "features_enriched": ENVIRONMENT_FEATURES,
         "weather_municipalities": int(weather["municipality_code"].nunique()),
         "weather_missing_panel_rows": int(panel["relative_humidity_pct"].isna().sum()),

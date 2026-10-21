@@ -1,8 +1,9 @@
-"""Municipal ERA5 weather and IBGE spatial weights for the dengue panel."""
+"""NASA POWER municipal weather and IBGE spatial weights for the dengue panel."""
 
 from __future__ import annotations
 
 import json
+import io
 import time
 from pathlib import Path
 
@@ -18,13 +19,14 @@ IBGE_MESH_URL = (
     "https://servicodados.ibge.gov.br/api/v3/malhas/paises/BR"
     "?intrarregiao=municipio&formato=application%2Fvnd.geo%2Bjson&qualidade=minima"
 )
-WEATHER_URL = "https://archive-api.open-meteo.com/v1/archive"
+WEATHER_URL = "https://power.larc.nasa.gov/api/temporal/daily/regional"
 WEATHER_START = "2014-12-28"
 WEATHER_END = "2025-12-31"
-WEATHER_VARIABLES = [
-    "precipitation_sum", "temperature_2m_mean", "relative_humidity_2m_mean",
-]
-WEATHER_BATCH_SIZE = 30
+WEATHER_PARAMETERS = {
+    "PRECTOTCORR": "precipitation_mm",
+    "T2M": "temperature_c",
+    "RH2M": "relative_humidity_pct",
+}
 
 
 def _atomic_csv(frame: pd.DataFrame, path: Path) -> None:
@@ -94,68 +96,123 @@ def aggregate_daily_weather(daily: pd.DataFrame) -> pd.DataFrame:
 
 
 def _download_weather(reference: pd.DataFrame, batch_cache: Path) -> pd.DataFrame:
-    rows: list[pd.DataFrame] = []
     batch_cache.mkdir(parents=True, exist_ok=True)
     locations = reference[["municipality_code", "latitude", "longitude"]].dropna()
     locations = locations.sort_values("municipality_code").reset_index(drop=True)
-    for start in range(0, len(locations), WEATHER_BATCH_SIZE):
-        batch = locations.iloc[start : start + WEATHER_BATCH_SIZE]
-        cached_batch = batch_cache / f"batch_{start:05d}.csv.gz"
-        if cached_batch.exists():
-            rows.append(pd.read_csv(cached_batch, dtype={"municipality_code": str}, parse_dates=["week_start"]))
-            continue
-        params = {
-            "latitude": ",".join(f"{value:.5f}" for value in batch["latitude"]),
-            "longitude": ",".join(f"{value:.5f}" for value in batch["longitude"]),
-            "start_date": WEATHER_START,
-            "end_date": WEATHER_END,
-            "daily": ",".join(WEATHER_VARIABLES),
-            "timezone": "GMT",
-            "models": "era5",
-        }
-        for attempt in range(5):
-            try:
-                response = requests.get(WEATHER_URL, params=params, timeout=(30, 180))
-                response.raise_for_status()
-                payload = response.json()
-                break
-            except requests.HTTPError as error:
-                response = getattr(error, "response", None)
-                status = getattr(response, "status_code", None)
-                if status == 429:
-                    reason = response.json().get("reason", "limite de requisições")
-                    if attempt == 4:
-                        raise RuntimeError(f"Open-Meteo manteve o limite de requisições: {reason}") from error
-                    print(f"Open-Meteo: {reason} Aguardando 60 segundos.", flush=True)
-                    time.sleep(60)
-                elif status == 400:
-                    raise RuntimeError(f"Open-Meteo rejeitou lote de clima: {response.text}") from error
-                elif attempt == 4:
-                    raise
-                else:
-                    time.sleep(2 ** attempt)
-            except requests.RequestException:
-                if attempt == 4:
-                    raise
-                time.sleep(2 ** attempt)
-        if isinstance(payload, dict):
-            payload = [payload]
-        batch_rows = []
-        for location, result in zip(batch.itertuples(index=False), payload):
-            daily = result.get("daily", {})
-            if not daily.get("time"):
-                continue
-            frame = pd.DataFrame(daily)
-            frame["municipality_code"] = location.municipality_code
-            batch_rows.append(frame)
-        batch_daily = pd.concat(batch_rows, ignore_index=True)
-        weekly = aggregate_daily_weather(batch_daily)
-        _atomic_csv(weekly, cached_batch)
-        rows.append(weekly)
-        print(f"Clima ERA5: {min(start + len(batch), len(locations)):,}/{len(locations):,} municípios", flush=True)
-        time.sleep(10)
+    locations["grid_latitude"] = (locations["latitude"] * 2).round() / 2
+    locations["grid_longitude"] = (locations["longitude"] / 0.625).round() * 0.625
 
-    return pd.concat(rows, ignore_index=True)
+    lat_min = int(-35 + ((locations["latitude"].min() + 35) // 10) * 10)
+    lat_max = int(-35 + ((locations["latitude"].max() + 35) // 10) * 10)
+    lon_min = int(-75 + ((locations["longitude"].min() + 75) // 10) * 10)
+    lon_max = int(-75 + ((locations["longitude"].max() + 75) // 10) * 10)
+    years = range(pd.Timestamp(WEATHER_START).year, pd.Timestamp(WEATHER_END).year + 1)
+    tiles = []
+    for tile_lat in range(lat_min, lat_max + 1, 10):
+        for tile_lon in range(lon_min, lon_max + 1, 10):
+            cells = locations.loc[
+                locations["grid_latitude"].ge(tile_lat) & locations["grid_latitude"].lt(tile_lat + 10)
+                & locations["grid_longitude"].ge(tile_lon) & locations["grid_longitude"].lt(tile_lon + 10),
+                ["grid_latitude", "grid_longitude"],
+            ].drop_duplicates().rename(columns={"grid_latitude": "latitude", "grid_longitude": "longitude"})
+            if not cells.empty:
+                tiles.append((tile_lat, tile_lon, cells))
+    cached: list[pd.DataFrame] = []
+    total = len(tiles) * len(years) * len(WEATHER_PARAMETERS)
+    completed = 0
+
+    for tile_lat, tile_lon, cells in tiles:
+        for year in years:
+            start_date = max(pd.Timestamp(WEATHER_START), pd.Timestamp(year=year, month=1, day=1))
+            end_date = min(pd.Timestamp(WEATHER_END), pd.Timestamp(year=year, month=12, day=31))
+            for parameter in WEATHER_PARAMETERS:
+                cache_path = batch_cache / f"{year}_lat{tile_lat}_lon{tile_lon}_{parameter}.csv.gz"
+                if cache_path.exists():
+                    weekly = pd.read_csv(cache_path, parse_dates=["week_start"])
+                else:
+                    params = {
+                        "parameters": parameter,
+                        "community": "AG",
+                        "longitude-min": tile_lon,
+                        "longitude-max": tile_lon + 10,
+                        "latitude-min": tile_lat,
+                        "latitude-max": tile_lat + 10,
+                        "start": start_date.strftime("%Y%m%d"),
+                        "end": end_date.strftime("%Y%m%d"),
+                        "format": "CSV",
+                        "time-standard": "UTC",
+                    }
+                    for attempt in range(5):
+                        try:
+                            response = requests.get(WEATHER_URL, params=params, timeout=(30, 180))
+                            response.raise_for_status()
+                            weekly = _parse_power_weather(response.text, parameter, tile_lat, tile_lon, cells)
+                            _atomic_csv(weekly, cache_path)
+                            time.sleep(1)
+                            break
+                        except requests.HTTPError as error:
+                            response = getattr(error, "response", None)
+                            status = getattr(response, "status_code", None)
+                            if attempt == 4 or (status is not None and status not in (429, 500, 502, 503, 504)):
+                                raise RuntimeError(f"NASA POWER rejeitou {parameter}, {year}, tile ({tile_lat}, {tile_lon}): {error}") from error
+                            time.sleep(min(30 * (2 ** attempt), 300))
+                        except requests.RequestException:
+                            if attempt == 4:
+                                raise
+                            time.sleep(2 ** attempt)
+                cached.append(weekly)
+                completed += 1
+                print(f"NASA POWER: {completed}/{total} blocos", flush=True)
+
+    data = pd.concat(cached, ignore_index=True)
+    data = data.groupby(["latitude", "longitude", "week_start", "parameter"], as_index=False).agg(
+        value_sum=("value_sum", "sum"), day_count=("day_count", "sum"),
+    )
+    weather_frames = []
+    for parameter, column in WEATHER_PARAMETERS.items():
+        part = data.loc[data["parameter"].eq(parameter)].copy()
+        part[column] = part["value_sum"] if parameter == "PRECTOTCORR" else part["value_sum"] / part["day_count"]
+        weather_frames.append(part[["latitude", "longitude", "week_start", column]])
+    weather = weather_frames[0]
+    for part in weather_frames[1:]:
+        weather = weather.merge(part, on=["latitude", "longitude", "week_start"], how="outer")
+
+    locations = locations.merge(
+        weather,
+        left_on=["grid_latitude", "grid_longitude"],
+        right_on=["latitude", "longitude"],
+        how="left",
+    )
+    return locations[["municipality_code", "week_start", *WEATHER_PARAMETERS.values()]]
+
+
+def _parse_power_weather(
+    text: str, parameter: str, tile_lat: int, tile_lon: int, cells: pd.DataFrame,
+) -> pd.DataFrame:
+    csv_start = next(
+        (index for index, line in enumerate(text.splitlines()) if line.startswith("LAT,LON,YEAR,DOY,")),
+        None,
+    )
+    if csv_start is None:
+        raise ValueError(f"NASA POWER não retornou CSV para {parameter}: {text[:300]}")
+    daily = pd.read_csv(io.StringIO("\n".join(text.splitlines()[csv_start:])))
+    daily = daily.rename(columns={"LAT": "latitude", "LON": "longitude"})
+    daily["latitude"] = daily["latitude"].round(6)
+    daily["longitude"] = daily["longitude"].round(6)
+    daily = daily.loc[
+        daily["latitude"].ge(tile_lat) & daily["latitude"].lt(tile_lat + 10)
+        & daily["longitude"].ge(tile_lon) & daily["longitude"].lt(tile_lon + 10)
+    ].copy()
+    daily = daily.merge(cells, on=["latitude", "longitude"], how="inner")
+    daily["value"] = pd.to_numeric(daily[parameter], errors="coerce").replace(-999, np.nan)
+    daily = daily.dropna(subset=["value"])
+    daily["date"] = pd.to_datetime(
+        daily["YEAR"].astype(str) + daily["DOY"].astype(str).str.zfill(3), format="%Y%j",
+    )
+    daily["week_start"] = daily["date"] - pd.to_timedelta((daily["date"].dt.dayofweek + 1) % 7, unit="D")
+    return daily.groupby(["latitude", "longitude", "week_start"], as_index=False).agg(
+        value_sum=("value", "sum"), day_count=("value", "count"),
+    ).assign(parameter=parameter)
 
 
 def load_environmental_data(
@@ -165,7 +222,7 @@ def load_environmental_data(
     """Return municipal coordinates, weekly weather, and row-normalized Queen edges."""
     coords_path = processed / "ibge_municipal_geometry.csv"
     neighbors_path = processed / "municipal_neighbors.csv"
-    weather_path = processed / "municipality_week_weather.csv.gz"
+    weather_path = processed / "municipality_week_weather_nasa_power.csv.gz"
     mesh_path = processed / "ibge_municipalities_current.geojson"
 
     if coords_path.exists() and neighbors_path.exists():
@@ -180,7 +237,7 @@ def load_environmental_data(
     if weather_path.exists():
         weather = pd.read_csv(weather_path, dtype={"municipality_code": str}, parse_dates=["week_start"])
     else:
-        weather = _download_weather(enriched_reference, processed / "weather_batches")
+        weather = _download_weather(enriched_reference, processed / "weather_nasa_power_tiles")
         _atomic_csv(weather, weather_path)
     return enriched_reference, weather, edges
 

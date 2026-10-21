@@ -69,7 +69,7 @@
       <div class="section-heading model-heading">
         <p class="eyebrow">03 / TESTE TEMPORAL</p>
         <h2>Mais complexidade<br>não trouxe <em>ganho.</em></h2>
-        <p>Random Forest, LightGBM e variações foram comparados com referências simples no teste de 2024–2025. Menor WAPE indica menor erro relativo ao volume total.</p>
+        <p>Modelos com clima NASA POWER e vizinhança foram comparados com referências simples no teste de 2024–2025. Menor WAPE indica menor erro relativo ao volume total.</p>
       </div>
       <div class="model-content">
         <figure class="model-figure">
@@ -83,15 +83,15 @@
               <thead><tr><th>Modelo</th><th>2024</th><th>2025</th></tr></thead>
               <tbody>
                 <tr class="best"><th scope="row">Persistência</th><td>26,1%</td><td>31,3%</td></tr>
-                <tr><th scope="row">Random Forest</th><td>41,0%</td><td>33,4%</td></tr>
-                <tr><th scope="row">LightGBM atual</th><td>45,8%</td><td>34,9%</td></tr>
-                <tr><th scope="row">LightGBM ajustado</th><td>45,8%</td><td>35,0%</td></tr>
-                <tr><th scope="row">LightGBM Poisson</th><td>57,0%</td><td>61,5%</td></tr>
+                <tr><th scope="row">Random Forest</th><td>41,1%</td><td>33,3%</td></tr>
+                <tr><th scope="row">LightGBM base</th><td>44,0%</td><td>34,5%</td></tr>
+                <tr><th scope="row">LightGBM clima + espacial</th><td>44,0%</td><td>34,1%</td></tr>
+                <tr><th scope="row">LightGBM Poisson</th><td>Instável</td><td>Instável</td></tr>
                 <tr><th scope="row">Sazonal · 52 sem.</th><td>95,6%</td><td>380,4%</td></tr>
               </tbody>
             </table>
           </div>
-          <p class="finding"><span>↗</span> Persistência teve o menor erro nos dois anos. Random Forest superou LightGBM, mas também não venceu a referência simples.</p>
+          <p class="finding"><span>↗</span> Persistência teve menor erro nos dois anos. Clima e vizinhança quase não alteraram o WAPE do LightGBM em 2024 (+0,1 p.p.) e melhoraram 0,4 p.p. em 2025; nenhum modelo venceu a persistência.</p>
         </div>
       </div>
       <div class="capture">
@@ -107,6 +107,7 @@
       </div>
       <div class="method-detail">
         <p>Previsão semanal por município, com treino até 2023 e teste temporal em 2024–2025. Casos prováveis do SINAN foram agregados pela data de início dos sintomas e município de residência.</p>
+        <p>Clima semanal da NASA POWER / MERRA-2: precipitação, temperatura e umidade. Cobertura em 5.559 dos 5.571 códigos de referência; um não tem geometria IBGE e 11 não têm série associada à grade. <a href="https://power.larc.nasa.gov/docs/services/api/temporal/daily/">Documentação da API NASA POWER</a>.</p>
         <p>Dados retrospectivos podem incluir atrasos e revisões. O Espírito Santo foi excluído desde 2020 por mudança no sistema de registro. Resultado exploratório: não é ferramenta de alerta em produção nem de decisão clínica.</p>
         <a class="text-link" href="https://github.com/Leocarneiroo/projeto-semantix-dengue/blob/main/relatorio.md">Ler relatório completo <span aria-hidden="true">↗</span></a>
       </div>
