@@ -6,7 +6,7 @@ Projeto de ciência de dados para estimar a quantidade de notificações prováv
 
 ## Visualização
 
-Abra o [painel publicado](https://leocarneiroo.github.io/projeto-semantix-dengue/) para explorar o panorama, a distribuição municipal e a comparação das previsões. O painel é estático; os gráficos são imagens versionadas neste repositório.
+Abra o [painel publicado](https://leocarneiroo.github.io/projeto-semantix-dengue/) para explorar o panorama, a distribuição municipal, a comparação das previsões e os gráficos de clima e dengue. O painel é estático; os gráficos são imagens versionadas neste repositório.
 
 ![Série semanal nacional de notificações prováveis](figures/serie_nacional.png)
 
@@ -38,7 +38,10 @@ source .venv/bin/activate
 pip install -r requirements.txt
 python src/analyze.py
 python -m src.compare_models
+python -m src.climate_case_analysis
 ```
+
+O gerador climático usa os dados processados de clima, casos e população já versionados; não refaz downloads.
 
 ## Entregáveis
 
@@ -57,6 +60,8 @@ python -m src.compare_models
 - `src/analyze.py`: pipeline de download, agregação, modelagem e visualização.
 - `src/environmental_features.py`: baixa/cacheia clima histórico e malha municipal, cria vizinhança Queen.
 - `src/compare_models.py`: compara persistência, sazonal, LightGBM base/enriquecido, Poisson e Random Forest; seleção usa validações expansivas 2021–2023, mantendo 2024–2025 como teste.
+- `src/climate_case_analysis.py`: relaciona faixas semanais de clima NASA POWER à incidência média de dengue nas quatro semanas seguintes.
+- `figures/clima_casos_precipitacao.png`, `figures/clima_casos_temperatura.png` e `figures/clima_casos_umidade.png`: gráficos descritivos de clima e dengue.
 
 Para executar os testes automatizados sem baixar os microdados:
 
