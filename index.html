@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="Análise visual de notificações prováveis de dengue no Brasil e avaliação de previsões semanais por município.">
   <title>Dengue no Brasil — análise visual</title>
-  <link rel="stylesheet" href="style.css?v=2">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
   <header class="topbar">
@@ -16,6 +16,7 @@
     <nav aria-label="Navegação principal">
       <a href="#panorama">Panorama</a>
       <a href="#previsao">Previsão</a>
+      <a href="#clima">Clima</a>
       <a href="#metodo">Método</a>
     </nav>
     <span class="update"><i></i> EXTRAÇÃO 19 OUT 2026</span>
@@ -33,7 +34,7 @@
         <img src="figures/serie_nacional.png" alt="Série semanal nacional de notificações prováveis de dengue, com pico acentuado em 2024.">
         <figcaption><span>SÉRIE SEMANAL NACIONAL</span><span>2015—2025</span></figcaption>
       </figure>
-      <div class="intro-foot"><span>ANÁLISE EXPLORATÓRIA</span><span>01 — 04</span></div>
+      <div class="intro-foot"><span>ANÁLISE EXPLORATÓRIA</span><span>01 — 05</span></div>
     </section>
 
     <section class="volume section-pad" id="serie">
@@ -100,9 +101,32 @@
       </div>
     </section>
 
+    <section class="climate section-pad" id="clima">
+      <div class="section-heading climate-heading">
+        <p class="eyebrow">04 / CLIMA E DENGUE</p>
+        <h2>Uma semana de clima,<br>quatro semanas de <em>casos.</em></h2>
+        <p>Cada faixa compara o clima semanal da NASA POWER à incidência média de dengue nas quatro semanas seguintes, no mesmo município. Recorte: população a partir de 20 mil habitantes e Censo 2022.</p>
+      </div>
+      <div class="climate-charts">
+        <figure>
+          <img src="figures/clima_casos_precipitacao.png" alt="Gráfico por faixas de precipitação semanal e casos médios de dengue por 100 mil habitantes nas quatro semanas seguintes.">
+          <figcaption>PRECIPITAÇÃO · MM/SEMANA</figcaption>
+        </figure>
+        <figure>
+          <img src="figures/clima_casos_temperatura.png" alt="Gráfico por faixas de temperatura média semanal e casos médios de dengue por 100 mil habitantes nas quatro semanas seguintes.">
+          <figcaption>TEMPERATURA · °C</figcaption>
+        </figure>
+        <figure>
+          <img src="figures/clima_casos_umidade.png" alt="Gráfico por faixas de umidade relativa semanal e casos médios de dengue por 100 mil habitantes nas quatro semanas seguintes.">
+          <figcaption>UMIDADE RELATIVA · %</figcaption>
+        </figure>
+      </div>
+      <p class="climate-note">NASA POWER/MERRA-2 estima o clima em uma grade, não em cada município. Os padrões são exploratórios e podem refletir sazonalidade e diferenças regionais; não demonstram causalidade.</p>
+    </section>
+
     <section class="method section-pad" id="metodo">
       <div class="method-lead">
-        <p class="eyebrow">04 / LEITURA RESPONSÁVEL</p>
+        <p class="eyebrow">05 / LEITURA RESPONSÁVEL</p>
         <h2>Um estudo para<br>orientar perguntas.</h2>
       </div>
       <div class="method-detail">
