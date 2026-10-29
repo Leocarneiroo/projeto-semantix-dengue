@@ -55,7 +55,7 @@ O gerador climático usa os dados processados de clima, casos e população já 
 - `data/processed/model_tuning_validation.csv`: WAPE por candidato e fold temporal da busca LightGBM.
 - `data/processed/model_comparison_predictions.csv.gz`: previsões comparadas, com município e UF.
 - `data/processed/municipality_week_weather_nasa_power.csv.gz`: cache semanal NASA POWER; recriado se removido.
-- `data/processed/weather_nasa_power_tiles/`: blocos anuais regionais cacheados para retomar coleta interrompida.
+- `data/processed/weather_nasa_power_tiles/`: blocos anuais regionais cacheados para retomar coleta interrompida. É criada localmente na primeira execução e **não é versionada** (está no `.gitignore`).
 - `data/processed/ibge_municipal_geometry.csv` e `municipal_neighbors.csv`: coordenadas municipais e pesos Queen normalizados.
 - `src/analyze.py`: pipeline de download, agregação, modelagem e visualização.
 - `src/environmental_features.py`: baixa/cacheia clima histórico e malha municipal, cria vizinhança Queen.
